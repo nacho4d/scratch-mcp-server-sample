@@ -29,6 +29,25 @@ function startServer() {
     transport
   );
 
+  // ツールの登録
+  server.registerTool({ // <-- 追加
+    name: 'count',
+    description: '文字数をカウントするツール',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        text: {
+          type: 'string',
+          description: '文字数をカウントしたいテキスト'
+        }
+      },
+      required: ['text']
+    },
+    execute: async (args: { text: string }) => {
+      return { content: [{ type: "text", text: args.text.length.toString() }] };
+    }
+  });
+
   // サーバーの起動
   server.start();
   Logger.info('MCP Server started');
