@@ -15,6 +15,7 @@ export default tseslint.config(
       // tweak to taste
       '@typescript-eslint/no-unused-vars': 'error',
       '@typescript-eslint/explicit-function-return-type': 'off',
+      '@typescript-eslint/no-explicit-any': 'off', // was 'warn'
     },
   }
 );

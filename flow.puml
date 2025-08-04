@@ -1,0 +1,70 @@
+@startuml MCP Flow
+!define JSONRPC jsonrpc:2.0, id:auto
+
+hide footbox
+
+actor "ユーザー" as user
+participant "MCP クライアント\n(例: Claude Desktop/LangGraph)" as client
+participant "MCP サーバー\n(例: stdio/http/websocketsで自前)" as server
+participant "LLM\n(例: Granite/Claude/OpenAI)" as llm
+
+== 起動と初期化 ==
+autonumber 1.1
+
+user -> client: アプリ起動
+
+group サーバー起動と初期化
+client -> server: **プロセス起動** node mcp-server.js
+activate server #DarkSalmon
+server --> client: プロセス起動成功
+client -> server: **初期化**\n{JSONRPC, <font color="blue">method:"initialize"</font>,\nparams:{protocolVersion:"2024-11-05",capabilities:{sampling:{}}, clientInfo:{...}}}
+server --> client: **初期化結果**\n{JSONRPC, <font color="#FF8040">result:{protocolVersion:"2024-11-05",\n<font color="#FF8040">capabilities:{tools:{listChanged:true}},serverInfo:{name:"Sample MCP Server", version:"1.0.0"}}</font>}
+client -> server: **通知**\n{jsonrpc:2.0, <font color="blue">method:"notifications/initialized"</font>}
+note right: 通知の場合は\nレスポンス本文無し
+end group
+
+group ツール取得 Tool Discovery
+client -> server: **ツール一覧取得要求**\n{JSONRPC, <font color="blue">method:"tools/list"</font>}
+server --> client: **ツール一覧**\n{JSONRPC, result:{tools:[<font color="#FF8040">{\n<font color="#FF8040">name:"count_characters",description:"Count characters in text",\n<font color="#FF8040">inputSchema:{type:"object", properties:{text:{type:"string"}}, required:["text"]}\n<font color="#FF8040">}</font>]}}
+end group
+
+== ユーザー操作 ==
+autonumber 2.1
+user -> client: "'Hello World'に何文字ありますか？"
+client -> llm: **LLMへの要求**\n{<font color="red">messages:[{role:"user", content:"'Hello World'に何文字ありますか？"</font>}],\ntools:<font color="#FF8040">[{name:"count_characters", description:"...", input_schema:{...}}]</font>}
+llm --> client: **ツールコール判断**\n{content:"何文字か数えますね...",\n<font color="magenta">tool_calls:[{id:"call_123", name:"count_characters",arguments:{text:"Hello World"}}]</font>}
+
+group ツール実行
+client -> server: **ツールコール**\n{JSONRPC, <font color="blue">method:"tools/call",\n<font color="#FF8040">params:{name:"count_characters", arguments:{text:"Hello World"}</font>}}
+server --> client: **ツール結果**\n{JSONRPC, <font color="#FF8040">result:{content:[{type:"text", text:"11"}]}</font>}
+end group
+
+' == LLM レスポンス生成 ==
+
+client -> llm: **ツール結果を持ってレスポンスを生成するためにLLMへの要求**\n{messages:[...user message..., ...assistant tool_calls...,\n<font color="#FF8040">{role:"tool", content:"11",</font> <font color="magenta">tool_call_id:"call_123"</font>}]}
+llm --> client: **最終結果**\n<font color="red">{content:"'Hello World'には11文字があります."}</font>
+
+client --> user: "'Hello World'には11文字があります."
+
+' == Optional: リソース取得 ==
+
+' note over client, server: **Additional MCP Methods (if server provides resources)**
+
+' client -> server: **resources/list**\n{JSONRPC, method:"resources/list"}
+
+' server --> client: **ResourceListResult**\n{JSONRPC, result:{resources:[{uri:"file:///path/to/data.txt",\nname:"Sample Data", description:"Sample text file"}]}}
+
+' client -> server: **resources/read**\n{JSONRPC, method:"resources/read",\nparams:{uri:"file:///path/to/data.txt"}}
+
+' server --> client: **ReadResourceResult**\n{JSONRPC, result:{contents:[{uri:"file:///path/to/data.txt",\nmimeType:"text/plain", text:"Sample file content here"}]}}
+
+== 終了 ==
+autonumber 3.1
+user -> client: アプリを閉じる
+
+client -> server: **プロセス終了** SIGTERM/SIGKILL
+note right: サブプロセスとして\n直ぐに死ぬ
+server --> client: 正常終了
+deactivate server
+
+@enduml
